@@ -2,28 +2,28 @@
 
 import pandas as pd
 from datasets import Dataset
-from transformers import T5Tokenizer, T5ForConditionalGeneration, Trainer, TrainingArguments
+from transformers import RobertaTokenizer, T5ForConditionalGeneration, Trainer, TrainingArguments, DataCollatorForSeq2Seq
 
 # Load your dataset
 df = pd.read_csv("code_reviews.csv")  # Assume this CSV has 'code' and 'review' columns
 dataset = Dataset.from_pandas(df)
 
 # Load the tokenizer and model
-tokenizer = T5Tokenizer.from_pretrained("Salesforce/codet5-base")
+tokenizer = RobertaTokenizer.from_pretrained("Salesforce/codet5-base")
 model = T5ForConditionalGeneration.from_pretrained("Salesforce/codet5-base")
 
 # Preprocess the dataset
 def preprocess_function(examples):
     inputs = ["review: " + code for code in examples["code"]]
     model_inputs = tokenizer(inputs, max_length=512, truncation=True)
-
-    with tokenizer.as_target_tokenizer():
-        labels = tokenizer(examples["review"], max_length=128, truncation=True)
-
+    labels = tokenizer(text_target=examples["review"], max_length=128, truncation=True)
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
 
 tokenized_dataset = dataset.map(preprocess_function, batched=True)
+
+# Create data collator
+data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
 
 # Training arguments
 training_args = TrainingArguments(
@@ -42,6 +42,7 @@ trainer = Trainer(
     args=training_args,
     train_dataset=tokenized_dataset,
     eval_dataset=tokenized_dataset,
+    data_collator=data_collator,
 )
 
 # Fine-tune the model
